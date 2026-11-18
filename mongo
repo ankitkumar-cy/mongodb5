@@ -1,0 +1,469 @@
+
+
+
+
+Set A – Scenario A1: Online Store Inventory Update**
+*Database: `shopDB` **Collection:** `products`
+Task 1. Change Keyboard price using** `$set`
+
+JavaScript
+
+use shopDB
+
+db.products.updateOne(
+  { name: "Keyboard" },
+  { $set: { price: 1400 } }
+)
+
+db.products.findOne({ name: "Keyboard" })
+```
+
+Task 2. Increase Wireless Mouse stock using** `$inc`
+
+JavaScript
+
+
+db.products.updateOne(
+  { name: "Wireless Mouse" },
+  { $inc: { stock: 25 } }
+)
+
+
+Stock: 50 → 75
+
+Task 3. Remove oldCode field using** `$unset`
+
+JavaScript
+
+```
+db.products.updateMany(
+  {},
+  { $unset: { oldCode: "" } }
+)
+Task 4. Replace complete document using** `replaceOne()`
+
+JavaScript
+
+
+db.products.replaceOne(
+  { _id: 3 },
+  {
+    _id: 3,
+    name: "USB-C Cable",
+    category: "Accessories",
+    price: 350,
+    stock: 100,
+    discontinued: false
+  }
+)
+
+db.products.findOne({ _id: 3 })
+
+
+Task 5. Delete single product**
+
+JavaScript
+
+
+db.products.deleteOne({
+  name: "Old Floppy Drive"
+})
+```
+
+### **Task 6. Delete all discontinued products**
+
+JavaScript
+
+```
+db.products.deleteMany({
+  discontinued: true
+})
+```
+
+Task 7. Aggregation: Stock summary per category**
+
+JavaScript
+
+
+db.products.aggregate([
+  {
+    $match: {
+      price: { $gte: 500 }
+    }
+  },
+  {
+    $group: {
+      _id: "$category",
+      totalStock: { $sum: "$stock" },
+      avgPrice: { $avg: "$price" }
+    }
+  },
+  {
+    $sort: {
+      totalStock: -1
+    }
+  },
+  {
+    $project: {
+      _id: 0,
+      category: "$_id",
+      totalStock: 1,
+      avgPrice: 1
+    }
+  }
+])
+
+
+Expected Output:
+
+JavaScript
+
+
+[
+  {
+    category: "Accessories",
+    totalStock: 105,
+    avgPrice: 1100
+  },
+  {
+    category: "Computers",
+    totalStock: 25,
+    avgPrice: 33500
+  }
+]
+```
+
+Set A – Scenario A3: Employee Directory – Indexing**
+
+**Database:** `companyDB` **Collection:** `employees`
+
+First: Insert sample data
+
+JavaScript
+
+
+use companyDB
+
+db.employees.insertMany([
+  {
+    _id: 1, name: "Anil", dept: "IT", city: "Chennai",
+    salary: 60000, skills: ["MongoDB", "Python"]
+  },
+  {
+    _id: 2, name: "Bhavna", dept: "HR", city: "Mumbai",
+    salary: 45000, skills: ["Excel", "Communication"]
+  },
+  {
+    _id: 3, name: "Charan", dept: "IT", city: "Chennai",
+    salary: 75000, skills: ["Java", "MongoDB"]
+  },
+  {
+    _id: 4, name: "Deepa", dept: "Finance", city: "Pune",
+    salary: 52000, skills: ["Excel", "Tally"]
+  },
+  {
+    _id: 5, name: "Elan", dept: "IT", city: "Bengaluru",
+    salary: 68000, skills: ["Python", "Docker"]
+  },
+  {
+    _id: 6, name: "Farida", dept: "HR", city: "Delhi",
+    salary: 48000, skills: ["Communication", "Recruitment"]
+  },
+  {
+    _id: 7, name: "Gokul", dept: "Finance", city: "Chennai",
+    salary: 58000, skills: ["Tally", "Excel"]
+  },
+  {
+    _id: 8, name: "Hema", dept: "IT", city: "Pune",
+    salary: 82000, skills: ["MongoDB", "Kubernetes"]
+  }
+])
+```
+Task 1. Check performance without an index**
+
+JavaScript
+
+
+db.employees.find({ dept: "IT" })
+.explain("executionStats")
+
+
+Expected Output:
+
+JavaScript
+
+winningPlan.stage: "COLLSCAN"
+executionStats.nReturned: 4
+executionStats.totalKeysExamined: 0
+executionStats.totalDocsExamined: 8
+```
+
+Explanation: COLLSCAN means MongoDB checks all 8 documents to find 4 IT employees.
+
+Task 2. Create a single-field index on dept**
+
+JavaScript
+
+
+db.employees.createIndex({ dept: 1 })
+
+
+Run explain again:
+
+JavaScript
+
+
+db.employees.find({ dept: "IT" })
+.explain("executionStats")
+
+
+**Expected Output:**
+
+JavaScript
+
+```
+winningPlan.stage: "FETCH"
+winningPlan.inputStage.stage: "IXSCAN"
+winningPlan.inputStage.indexName: "dept_1"
+
+nReturned: 4
+totalKeysExamined: 4
+totalDocsExamined: 4
+```
+
+Explanation: IXSCAN means MongoDB uses the index instead of scanning every document.
+
+### **Task 3. Create compound index on dept and salary**
+
+JavaScript
+
+```
+db.employees.createIndex({
+  dept: 1,
+  salary: -1
+})
+```
+
+Find IT employees sorted by highest salary:
+
+JavaScript
+
+```
+db.employees.find({
+  dept: "IT"
+}).sort({
+  salary: -1
+})
+```
+
+Check execution plan:
+
+JavaScript
+
+```
+db.employees.find({
+  dept: "IT"
+}).sort({
+  salary: -1
+}).explain("executionStats")
+```
+
+**Expected Result:**
+
+JavaScript
+
+```
+Hema    82000
+Charan  75000
+Elan    68000
+Anil    60000
+```
+
+Expected index name:
+
+JavaScript
+
+```
+dept_1_salary_-1
+```
+
+Explanation: MongoDB uses IXSCAN. No SORT stage is needed because the compound index already supports the required sorting.
+
+### **Task 4. Create multikey index on skills**
+
+JavaScript
+
+```
+db.employees.createIndex({
+  skills: 1
+})
+```
+
+Find employees who know MongoDB:
+
+JavaScript
+
+```
+db.employees.find({
+  skills: "MongoDB"
+})
+```
+
+Check execution statistics:
+
+JavaScript
+
+```
+db.employees.find({
+  skills: "MongoDB"
+}).explain("executionStats")
+```
+
+**Expected Result:**
+
+JavaScript
+
+```
+Anil
+Charan
+Hema
+```
+
+Expected:
+
+JavaScript
+
+```
+indexName: "skills_1"
+isMultiKey: true
+nReturned: 3
+totalKeysExamined: 3
+totalDocsExamined: 3
+```
+
+Explanation: A multikey index is automatically created when an index is made on an array field.
+
+### **Task 5. Hide and unhide the index**
+
+Hide the skills index:
+
+JavaScript
+
+```
+db.employees.hideIndex("skills_1")
+```
+
+Check query performance:
+
+JavaScript
+
+```
+db.employees.find({
+  skills: "MongoDB"
+}).explain("executionStats")
+```
+
+Expected result:
+
+JavaScript
+
+```
+winningPlan.stage: "COLLSCAN"
+totalDocsExamined: 8
+nReturned: 3
+```
+
+Unhide the index:
+
+JavaScript
+
+```
+db.employees.unhideIndex("skills_1")
+```
+
+Check again:
+
+JavaScript
+
+```
+db.employees.find({
+  skills: "MongoDB"
+}).explain("executionStats")
+```
+
+Expected result: MongoDB can use `skills_1` again with IXSCAN.
+
+Explanation: A hidden index is maintained but ignored by the query planner.
+
+### **Task 6. Try unique index on city**
+
+First, try creating a unique index:
+
+JavaScript
+
+```
+db.employees.createIndex(
+  { city: 1 },
+  { unique: true }
+)
+```
+
+Expected Error:
+
+JavaScript
+
+
+E11000 duplicate key error
+
+
+Explanation: A unique index does not allow duplicate values. Here, Chennai and other cities occur more than once.
+
+Now create a unique index on the name field:
+
+JavaScript
+
+
+db.employees.createIndex(
+  { name: 1 },
+  { unique: true }
+)
+
+
+Expected output:
+
+JavaScript
+
+
+name_1
+
+
+Explanation: Every employee has a different name, so the unique index can be created successfully.
+
+Task 7. List all indexes
+
+JavaScript
+
+
+db.employees.getIndexes()
+
+Expected indexes:
+
+JavaScript
+
+
+[
+  { key: { _id: 1 }, name: "_id_" },
+  { key: { dept: 1 }, name: "dept_1" },
+  {
+    key: { dept: 1, salary: -1 },
+    name: "dept_1_salary_-1"
+  },
+  { key: { skills: 1 }, name: "skills_1" },
+  {
+    key: { name: 1 },
+    name: "name_1",
+    unique: true
+  }
+]
+
+
